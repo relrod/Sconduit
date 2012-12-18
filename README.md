@@ -45,7 +45,7 @@ just pass the result of `getCertificate` to it, along with the host.
 ```scala
 import me.elrod.sconduit.ConduitClient
 val client = ConduitClient.fromCertificateMap(
-  ConduitClient.getCertificate(token, apiURL))
+  ConduitClient.getCertificate(token, host))
 ```
 
 The main method to use to make calls to the API is, aptly named, `.call()`.
