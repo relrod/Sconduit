@@ -21,7 +21,7 @@ class ConduitClient(
     */
   def call(
     method: String,
-    params: Map[String, Any] = Map("" -> "")): Promise[Either[Throwable, JValue]] = {
+    params: Map[String, Any] = Map("" -> "")) = {
     val dispatchURL = if (apiURL.contains("/api")) apiURL else apiURL + "/api/"
 
     // I can't figure out how to get json4s to handle a Map[String, Any], so
@@ -51,12 +51,14 @@ class ConduitClient(
 object ConduitClient {
   implicit val formats = DefaultFormats
 
-  /** A convenience method to try getting an authenticated client.
+  /** Get the user's certificate and username, given a token.
     *
     * @param token The user's token.
-    * @return A new, authenticated ConduitClient
+    * @param host The full URL (with protocol!) to the Phabricator instance.
+    * @return A Map[String, String] containg a "username" field and a
+    *         "certificate" field.
     */
-  def fromToken(
+  def getCertificate(
     token: String,
     apiURL: String = "https://secure.phabricator.com/api/") = {
     val client = new ConduitClient(apiURL)
@@ -66,9 +68,25 @@ object ConduitClient {
         "host" -> apiURL,
         "token" -> token
       )).apply() // Block because we want to return a client, not a promise.
-    val username = (certResponse \ "result" \ "username").extract[String]
-    val certificate = (certResponse \ "result" \ "certificate").extract[String]
 
+    Map(
+      "username" -> (certResponse \ "result" \ "username").extract[String],
+      "certificate" -> (certResponse \ "result" \ "certificate").extract[String]
+    )
+  }
+
+  /** A convenience method to try getting an authenticated client.
+    *
+    * @param username The username to auth with.
+    * @param certificate The user's certificate
+    * @param apiURL The URL to the Phabricator instance (with protocol!)
+    * @return A new, authenticated ConduitClient
+    */
+  def fromCertificate(
+    username: String,
+    certificate: String,
+    apiURL: String = "https://secure.phabricator.com/api/") = {
+    val client = new ConduitClient(apiURL)
     val time = System.currentTimeMillis / 1000
 
     val authSignatureMD = java.security.MessageDigest.getInstance("SHA-1")
@@ -76,11 +94,7 @@ object ConduitClient {
     val authSignature = authSignatureMD.digest
       .map(x =>"%02x".format(x)).mkString
 
-    println(time.toString)
-    println(certificate)
-    println(authSignature)
-
-    client.call(
+    val connectResponse = client.call(
       "conduit.connect",
       Map(
         "client" -> "sconduit",
@@ -95,5 +109,20 @@ object ConduitClient {
     val connectionID = (connectResponse \ "result" \ "connectionID").extract[Int]
 
     new ConduitClient(apiURL, Some(sessionKey), Some(connectionID))
+  }
+
+  /** A convenience convenience method to get an authenticated client from a Map
+    *
+    * @param certificateMap A map containing a "username" and "certificate" key.
+    * @param apiURL The URL to the Phabricator instance (with protocol!)
+    * @return A new, authenticated ConduitClient
+    */
+  def fromCertificateMap(
+    certificateMap: Map[String, String],
+    apiURL: String = "https://secure.phabricator.com/api/") = {
+    ConduitClient.fromCertificate(
+      certificateMap("username"),
+      certificateMap("certificate"),
+      apiURL)
   }
 }
